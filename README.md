@@ -1,0 +1,158 @@
+# AXIS VAPIX API Tools
+
+A small set of Python utilities for discovering **Axis network cameras** on a local subnet and querying them via **VAPIX**.  
+Built to be practical on modern **AXIS OS 12.x**, where multicast discovery and older app-config endpoints may be disabled.
+
+![Screenshot](discover_axis_vapix%20screenshot.jpg)
+
+---
+
+## Features
+
+- **Subnet discovery (no SSDP required)**  
+  Scans an IP range and identifies Axis devices by calling the VAPIX Basic Device Info API.
+
+- **Device inventory output**  
+  For each discovered device, prints:
+  - Hostname
+  - IP address
+  - Device type
+  - Model
+  - Product name
+  - Serial number
+  - AXIS OS / firmware version
+
+- **ACAP app visibility**
+  - Lists installed ACAP applications
+  - Shows whether each app is **Running / Stopped / Idle**
+  - Pulls app settings using the VAPIX Parameter API and prints them per‑app
+
+- **Progress bar** during subnet scan (optional, via `tqdm`)
+
+---
+
+## Repository contents
+
+- `discover_axis_vapix.py`  
+  Main discovery tool (subnet scan + device info + apps + params).
+
+- `discover_axis_vapix screenshot.jpg`  
+  Example output screenshot.
+
+---
+
+## Requirements
+
+- Python **3.8+**
+- Packages:
+  - `requests`
+  - `tqdm` (optional but recommended for progress bar)
+
+Install deps:
+
+```bash
+pip install requests tqdm
+```
+
+---
+
+## Usage
+
+Run a scan on your local subnet:
+
+```bash
+python discover_axis_vapix.py --subnet 192.168.1.0/24 --user root --passw "yourPassword"
+```
+
+### Common flags
+
+- `--subnet`  
+  CIDR subnet to scan. Example: `192.168.1.0/24`
+
+- `--user` / `--passw`  
+  Admin credentials. **Recommended**, and required to list ACAP apps + settings.
+
+- `--workers`  
+  Number of parallel probe threads (default is high for quick LAN scans).
+
+- `--timeout`  
+  HTTP request timeout per host.
+
+- `--param-timeout`  
+  Timeout for the **full parameter dump** (used to find app settings).
+
+---
+
+## Example output
+
+Per‑device app/config listing first, then summary table:
+
+```
+== P1465-LE-LAB 192.168.1.185 (P1465-LE) ==
+  - FireSafe360 [Copar Corporation] v0.1.0 -> Running
+      params:
+        - ConfFireThresholdPercent = 75
+        - ConfSmokeThresholdPercent = 65
+        - LightstackIp = 192.168.1.233
+
+HostName      | IP            | Type          | Model    | Name                        | Serial       | OS Version | Apps
+-------------+---------------+---------------+----------+-----------------------------+--------------+------------+------------------------
+P1465-LE-LAB  | 192.168.1.185 | Bullet Camera | P1465-LE | AXIS P1465-LE Bullet Camera | B8A44FE6F274 | 12.6.97    | 4 installed (1 running)
+```
+
+---
+
+## How it works
+
+1. **Probe each IP** in the subnet for port **80/443**.
+2. If open, call:
+
+   **Basic Device Information API**  
+   `POST /axis-cgi/basicdeviceinfo.cgi`  
+   Used to identify Axis devices and fetch inventory fields.
+
+3. For each Axis camera (with admin creds):
+
+   **Application API**  
+   `POST /axis-cgi/applications/list.cgi`  
+   Returns installed ACAP apps + running state.
+
+4. To find app settings on AXIS OS 12.x:
+
+   **Parameter API (legacy CGI)**  
+   `GET /axis-cgi/param.cgi?action=list`  
+   The tool downloads the full parameter tree once per camera and filters keys
+   that match app name/vendor tokens, then prints them under each app.
+
+---
+
+## Notes & limitations
+
+- **SSDP/UPnP discovery is not used**  
+  AXIS OS 12.x often disables multicast discovery by default, so subnet scan is the most reliable method.
+
+- **App settings are heuristic‑matched**  
+  Some 3rd‑party ACAPs do not expose configuration through VAPIX parameters; these will show “no matching keys found.”
+
+- **Non‑standard ports**  
+  If your cameras run HTTP/HTTPS on ports other than 80/443, you’ll need to extend the probe logic.
+
+- **Credentials**  
+  Without admin credentials you’ll still get device inventory, but **apps/settings will be skipped**.
+
+---
+
+## Contributing
+
+Issues and PRs are welcome. If you add support for:
+- alternate VAPIX endpoints
+- non‑80/443 ports
+- better per‑app settings discovery
+
+please open a pull request.
+
+---
+
+## License
+
+MIT License © 2025 Joseph Sammarco. See `LICENSE`.
