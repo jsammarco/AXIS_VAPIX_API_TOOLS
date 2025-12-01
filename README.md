@@ -36,8 +36,11 @@ Built to be practical on modern **AXIS OS 12.x**, where multicast discovery and 
 - `discover_axis_vapix.py`
   Main discovery tool (subnet scan + device info + apps + params).
 
-- `acap_update.py`
+- `acap_update_app.py`
   Batch ACAP updater that stops/removes an existing package, uploads a new `.eap`, and restarts the app across single IPs or whole subnets.
+
+- `acap_update_config.py`
+  Stops a running app, applies parameter changes from a config file, and restarts the app without uploading a new `.eap`.
 
 - `discover_axis_vapix screenshot.jpg`  
   Example output screenshot.
@@ -84,18 +87,18 @@ python discover_axis_vapix.py --subnet 192.168.1.0/24 --user root --passw "yourP
 - `--param-timeout`
   Timeout for the **full parameter dump** (used to find app settings).
 
-### Update ACAP apps with `acap_update.py`
+### Update ACAP apps with `acap_update_app.py`
 
 Update a single camera:
 
 ```bash
-python acap_update.py --ip 192.168.1.50 --user root --passw "yourPassword" --package MyAcap --eap /path/to/MyAcap.eap
+python acap_update_app.py --ip 192.168.1.50 --user root --passw "yourPassword" --package MyAcap --eap /path/to/MyAcap.eap
 ```
 
 Update every camera in a subnet (in parallel):
 
 ```bash
-python acap_update.py --subnet 192.168.1.0/24 --user root --passw "yourPassword" --package MyAcap --eap /path/to/MyAcap.eap --workers 32
+python acap_update_app.py --subnet 192.168.1.0/24 --user root --passw "yourPassword" --package MyAcap --eap /path/to/MyAcap.eap --workers 32
 ```
 
 Parameters:
@@ -115,11 +118,63 @@ Parameters:
 - `--eap`
   Path to the `.eap` file to upload.
 
+- `--config`
+  Optional path to a param config file (key=value per line) to apply after uploading.
+
 - `--workers`
   Parallel workers when running in subnet mode (default: 16).
 
 - `--no-stop`
   Skip the pre-upload `stop` call (still attempts remove/upload/start).
+
+- `--usergroup`
+  User group to include in `param.cgi` updates when supplying a config file.
+
+- `--prefer-http`
+  Prefer HTTP when both 80 and 443 are open (HTTPS remains default).
+
+- `--force-http` / `--force-https`
+  Force a specific scheme when probing cameras.
+
+### Update ACAP app configuration only with `acap_update_config.py`
+
+Update a single camera's app configuration without uploading a new package:
+
+```bash
+python acap_update_config.py --ip 192.168.1.50 --user root --passw "yourPassword" --package MyAcap --config ./config.txt
+```
+
+Update a whole subnet in parallel:
+
+```bash
+python acap_update_config.py --subnet 192.168.1.0/24 --user root --passw "yourPassword" --package MyAcap --config ./config.txt --workers 32
+```
+
+Parameters:
+
+- `--ip`
+  Single camera IP. Use this or `--subnet`.
+
+- `--subnet`
+  CIDR range to update (e.g., `192.168.1.0/24`).
+
+- `--user` / `--passw`
+  Admin credentials used for VAPIX control and parameter calls.
+
+- `--package`
+  Package `Name` value as reported by `applications/list.cgi`.
+
+- `--config`
+  **Required** path to the param config file (key=value per line).
+
+- `--workers`
+  Parallel workers when running in subnet mode (default: 16).
+
+- `--no-stop`
+  Skip stopping the app before applying the config (defaults to stopping first).
+
+- `--usergroup`
+  User group to include in `param.cgi` updates.
 
 - `--prefer-http`
   Prefer HTTP when both 80 and 443 are open (HTTPS remains default).

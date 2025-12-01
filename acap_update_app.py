@@ -325,7 +325,7 @@ def vapix_param_update(ip, username, password, scheme, updates,
 def update_one_camera(ip, username, password, package, eap_path,
                       stop_first=True, prefer_https=True,
                       force_http=False, force_https=False,
-                      param_updates=None):
+                      param_updates=None, usergroup=None):
 
     if force_http:
         scheme = "http" if tcp_port_open(ip, 80) else None
@@ -361,7 +361,7 @@ def update_one_camera(ip, username, password, package, eap_path,
 
     if param_updates:
         ok, msg = vapix_param_update(
-            ip, username, password, scheme, param_updates
+            ip, username, password, scheme, param_updates, usergroup=usergroup
         )
         if not ok:
             return ip, False, f"config update failed: {msg}"
@@ -404,6 +404,7 @@ def main():
     ap.add_argument("--prefer-http", action="store_true", help="Prefer HTTP if both open")
     ap.add_argument("--force-http", action="store_true", help="Force HTTP only")
     ap.add_argument("--force-https", action="store_true", help="Force HTTPS only")
+    ap.add_argument("--usergroup", help="User group to use for param.cgi updates")
     args = ap.parse_args()
 
     if args.ip:
@@ -433,7 +434,8 @@ def main():
                 prefer_https=prefer_https,
                 force_http=args.force_http,
                 force_https=args.force_https,
-                param_updates=param_updates
+                param_updates=param_updates,
+                usergroup=args.usergroup,
             ): ip
             for ip in targets
         }
