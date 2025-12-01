@@ -106,7 +106,7 @@ def coerce_value(raw: str) -> object:
 
 def send_overlay_request(ip: str, method: str, *, username: Optional[str], password: Optional[str],
                          version: str = "1.0", params: Optional[Dict[str, object]] = None,
-                         scheme: Optional[str] = None) -> Dict[str, object]:
+                         context: Optional[str] = None, scheme: Optional[str] = None) -> Dict[str, object]:
     if scheme is None:
         scheme = detect_scheme(ip) or "http"
 
@@ -117,9 +117,12 @@ def send_overlay_request(ip: str, method: str, *, username: Optional[str], passw
         # same value so either variant is accepted.
         "method": method,
         "action": method,
-        "version": version,
+        "apiVersion": version,
         "params": params or {},
     }
+
+    if context:
+        payload["context"] = context
 
     try:
         resp = post_with_anyauth(url, username=username, password=password, json_body=payload, timeout=15.0)
@@ -186,6 +189,7 @@ def perform_call(args: argparse.Namespace) -> None:
         password=args.passw,
         version=args.version,
         params=params,
+        context=args.context,
         scheme=args.scheme,
     )
     print_response(response)
@@ -199,6 +203,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--scheme", choices=["http", "https"], help="Force HTTP or HTTPS (auto-detect default)")
     parser.add_argument("--method", choices=SUPPORTED_METHODS, help="Overlay API method to call")
     parser.add_argument("--version", default="1.0", help="API version (default 1.0)")
+    parser.add_argument("--context", help="Optional context string to echo back in responses")
     parser.add_argument(
         "--param",
         action="append",
