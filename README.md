@@ -33,8 +33,11 @@ Built to be practical on modern **AXIS OS 12.x**, where multicast discovery and 
 
 ## Repository contents
 
-- `discover_axis_vapix.py`  
+- `discover_axis_vapix.py`
   Main discovery tool (subnet scan + device info + apps + params).
+
+- `acap_update.py`
+  Batch ACAP updater that stops/removes an existing package, uploads a new `.eap`, and restarts the app across single IPs or whole subnets.
 
 - `discover_axis_vapix screenshot.jpg`  
   Example output screenshot.
@@ -75,11 +78,54 @@ python discover_axis_vapix.py --subnet 192.168.1.0/24 --user root --passw "yourP
 - `--workers`  
   Number of parallel probe threads (default is high for quick LAN scans).
 
-- `--timeout`  
+- `--timeout`
   HTTP request timeout per host.
 
-- `--param-timeout`  
+- `--param-timeout`
   Timeout for the **full parameter dump** (used to find app settings).
+
+### Update ACAP apps with `acap_update.py`
+
+Update a single camera:
+
+```bash
+python acap_update.py --ip 192.168.1.50 --user root --passw "yourPassword" --package MyAcap --eap /path/to/MyAcap.eap
+```
+
+Update every camera in a subnet (in parallel):
+
+```bash
+python acap_update.py --subnet 192.168.1.0/24 --user root --passw "yourPassword" --package MyAcap --eap /path/to/MyAcap.eap --workers 32
+```
+
+Parameters:
+
+- `--ip`
+  Single camera IP. Use this or `--subnet`.
+
+- `--subnet`
+  CIDR range to update (e.g., `192.168.1.0/24`).
+
+- `--user` / `--passw`
+  Admin credentials used for VAPIX upload/control calls.
+
+- `--package`
+  Package `Name` value as reported by `applications/list.cgi`.
+
+- `--eap`
+  Path to the `.eap` file to upload.
+
+- `--workers`
+  Parallel workers when running in subnet mode (default: 16).
+
+- `--no-stop`
+  Skip the pre-upload `stop` call (still attempts remove/upload/start).
+
+- `--prefer-http`
+  Prefer HTTP when both 80 and 443 are open (HTTPS remains default).
+
+- `--force-http` / `--force-https`
+  Force a specific scheme when probing cameras.
 
 ---
 
@@ -89,7 +135,7 @@ Per‑device app/config listing first, then summary table:
 
 ```
 == P1465-LE-LAB 192.168.1.185 (P1465-LE) ==
-  - FireSafe360 [Copar Corporation] v0.1.0 -> Running
+  - FireSafe360 v0.1.0 -> Running
       params:
         - ConfFireThresholdPercent = 75
         - ConfSmokeThresholdPercent = 65
