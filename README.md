@@ -3,7 +3,7 @@
 A small set of Python utilities for discovering **Axis network cameras** on a local subnet and querying them via **VAPIX**.  
 Built to be practical on modern **AXIS OS 12.x**, where multicast discovery and older app-config endpoints may be disabled.
 
-![Screenshot](discover_axis_vapix%20screenshot.jpg)
+![Screenshot](https://github.com/jsammarco/AXIS_VAPIX_API_TOOLS/blob/main/discover_axis_vapix%20screenshot.jpg?raw=true)
 
 ---
 
