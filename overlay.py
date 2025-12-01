@@ -112,7 +112,11 @@ def send_overlay_request(ip: str, method: str, *, username: Optional[str], passw
 
     url = f"{scheme}://{ip}/axis-cgi/dynamicoverlay.cgi"
     payload = {
+        # Some firmware versions expect "action" instead of "method" for
+        # dynamicoverlay requests. To keep compatibility we send both with the
+        # same value so either variant is accepted.
         "method": method,
+        "action": method,
         "version": version,
         "params": params or {},
     }
