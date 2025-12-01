@@ -93,8 +93,9 @@ def _vapix_session(username=None, password=None, use_digest=False):
     return s
 
 
-def _post_with_anyauth(url, *, params=None, files=None, timeout=(5.0, 20.0),
-                       username=None, password=None):
+def _post_with_anyauth(url, *, params=None, files=None, data=None,
+                       timeout=(5.0, 20.0), username=None, password=None,
+                       headers=None):
     """
     curl --anyauth equivalent:
     try Basic first, if 401 retry Digest.
@@ -102,20 +103,34 @@ def _post_with_anyauth(url, *, params=None, files=None, timeout=(5.0, 20.0),
     """
     # Basic attempt
     s = _vapix_session(username, password, use_digest=False)
-    r = s.post(url, params=params, files=files, timeout=timeout)
+    r = s.post(
+        url,
+        params=params,
+        files=files,
+        data=data,
+        headers=headers,
+        timeout=timeout,
+    )
 
     if r.status_code != 401:
         return r
 
     # Digest retry
     s = _vapix_session(username, password, use_digest=True)
-    r2 = s.post(url, params=params, files=files, timeout=timeout)
+    r2 = s.post(
+        url,
+        params=params,
+        files=files,
+        data=data,
+        headers=headers,
+        timeout=timeout,
+    )
     return r2
 
 
-def _post_with_retries(url, *, params=None, files=None, timeout=(5.0, 20.0),
-                       username=None, password=None,
-                       retries=3, backoff=1.5):
+def _post_with_retries(url, *, params=None, files=None, data=None,
+                       timeout=(5.0, 20.0), username=None, password=None,
+                       headers=None, retries=3, backoff=1.5):
     """
     Anyauth + retries for slow/busy cameras.
     """
@@ -123,8 +138,14 @@ def _post_with_retries(url, *, params=None, files=None, timeout=(5.0, 20.0),
     for i in range(retries):
         try:
             return _post_with_anyauth(
-                url, params=params, files=files, timeout=timeout,
-                username=username, password=password
+                url,
+                params=params,
+                files=files,
+                data=data,
+                timeout=timeout,
+                headers=headers,
+                username=username,
+                password=password,
             )
         except (ReadTimeout, ConnectTimeout) as e:
             last_exc = e
@@ -243,11 +264,111 @@ def vapix_app_list(ip, username, password, scheme, timeout=(5.0, 15.0), retries=
     return apps
 
 
+# -------------------- Param config helpers --------------------
+
+def load_param_updates(path):
+    updates = {}
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if "=" not in stripped:
+                raise ValueError(f"Invalid line (missing '='): {line!r}")
+            key, value = stripped.split("=", 1)
+            updates[key.strip()] = value.strip()
+    if not updates:
+        raise ValueError("No parameters found in config file")
+    return updates
+
+
+def _nested_dict():
+    return {}
+
+
+def _insert_param(target, dotted_key, value):
+    parts = dotted_key.split(".")
+    if len(parts) < 2 or parts[0] != "root":
+        raise ValueError(f"Invalid parameter path '{dotted_key}'. Expected to start with 'root.'")
+
+    node = target.setdefault("root", _nested_dict())
+    for part in parts[1:-1]:
+        node = node.setdefault(part, _nested_dict())
+    node[parts[-1]] = value
+
+
+def _dict_to_vaconfig_group(name, payload):
+    group_el = ET.Element("group", name=name)
+    for key, val in payload.items():
+        if isinstance(val, dict):
+            group_el.append(_dict_to_vaconfig_group(key, val))
+        else:
+            param_el = ET.SubElement(group_el, "parameter", name=key)
+            value_el = ET.SubElement(param_el, "value")
+            value_el.text = str(val)
+    return group_el
+
+
+def build_vaconfig_xml(updates):
+    tree = {}
+    for key, value in updates.items():
+        _insert_param(tree, key, value)
+
+    if "root" not in tree:
+        raise ValueError("No root parameters found")
+
+    config_el = ET.Element("config", version="1.0")
+    config_el.append(_dict_to_vaconfig_group("root", tree["root"]))
+    return ET.tostring(config_el, encoding="unicode")
+
+
+def vapix_vaconfig_modify(ip, username, password, scheme, app_name, updates,
+                          timeout=(5.0, 20.0), retries=2):
+    url = f"{scheme}://{ip}/axis-cgi/vaconfig.cgi"
+    xml_body = build_vaconfig_xml(updates)
+    payload = f"action=modify&name={app_name}\n{xml_body}"
+
+    try:
+        r = _post_with_retries(
+            url,
+            data=payload,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=timeout,
+            username=username,
+            password=password,
+            retries=retries,
+        )
+    except Exception as e:
+        return False, f"request failed: {e}"
+
+    if r.status_code != 200:
+        return False, f"HTTP {r.status_code}: {r.text.strip()[:200]}"
+
+    try:
+        root = ET.fromstring(r.text)
+    except ET.ParseError:
+        return False, (r.text or "invalid response")[:200]
+
+    if root.attrib.get("result", "").lower() == "ok":
+        return True, "OK"
+
+    err = root.find(".//error")
+    if err is not None:
+        err_type = err.attrib.get("type", "")
+        err_msg = err.attrib.get("message", "")
+        details = f"{err_type}: {err_msg}".strip(": ")
+    else:
+        details = r.text.strip()[:200] or "unexpected response"
+
+    return False, details
+
+
 # -------------------- Update flow --------------------
 
 def update_one_camera(ip, username, password, package, eap_path,
                       stop_first=True, prefer_https=True,
-                      force_http=False, force_https=False):
+                      force_http=False, force_https=False,
+                      param_updates=None):
 
     if force_http:
         scheme = "http" if tcp_port_open(ip, 80) else None
@@ -281,6 +402,13 @@ def update_one_camera(ip, username, password, package, eap_path,
 
     time.sleep(2)
 
+    if param_updates:
+        ok, msg = vapix_vaconfig_modify(
+            ip, username, password, scheme, package, param_updates
+        )
+        if not ok:
+            return ip, False, f"config update failed: {msg}"
+
     # Start (hard fail if not OK)
     ok, msg = vapix_app_control(ip, username, password, scheme, "start", package)
     if not ok and "already running" not in msg.lower():
@@ -313,6 +441,7 @@ def main():
     ap.add_argument("--passw", required=True, help="Admin password")
     ap.add_argument("--package", required=True, help="ACAP package Name= from list.cgi")
     ap.add_argument("--eap", required=True, help="Path to .eap file")
+    ap.add_argument("--config", help="Path to param config file (key=value per line)")
     ap.add_argument("--workers", type=int, default=16, help="Parallel workers in subnet mode")
     ap.add_argument("--no-stop", action="store_true", help="Don't stop before remove")
     ap.add_argument("--prefer-http", action="store_true", help="Prefer HTTP if both open")
@@ -329,6 +458,8 @@ def main():
 
     prefer_https = not args.prefer_http
 
+    param_updates = load_param_updates(args.config) if args.config else None
+
     pbar = tqdm(total=len(targets), desc="Updating cameras", unit="cam") if tqdm else None
     results = []
 
@@ -344,7 +475,8 @@ def main():
                 stop_first=not args.no_stop,
                 prefer_https=prefer_https,
                 force_http=args.force_http,
-                force_https=args.force_https
+                force_https=args.force_https,
+                param_updates=param_updates
             ): ip
             for ip in targets
         }
