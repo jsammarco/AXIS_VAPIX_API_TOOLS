@@ -135,7 +135,7 @@ Per‑device app/config listing first, then summary table:
 
 ```
 == P1465-LE-LAB 192.168.1.185 (P1465-LE) ==
-  - FireSafe360 v0.1.0 -> Running
+  - FireXXXXXXX v0.1.0 -> Running
       params:
         - ConfFireThresholdPercent = 75
         - ConfSmokeThresholdPercent = 65
@@ -143,7 +143,7 @@ Per‑device app/config listing first, then summary table:
 
 HostName      | IP            | Type          | Model    | Name                        | Serial       | OS Version | Apps
 -------------+---------------+---------------+----------+-----------------------------+--------------+------------+------------------------
-P1465-LE-LAB  | 192.168.1.185 | Bullet Camera | P1465-LE | AXIS P1465-LE Bullet Camera | B8A44FE6F274 | 12.6.97    | 4 installed (1 running)
+P1465-LE-LAB  | 192.168.1.185 | Bullet Camera | P1465-LE | AXIS P1465-LE Bullet Camera | B8A44FE6XXXX | 12.6.97    | 4 installed (1 running)
 ```
 
 ---
