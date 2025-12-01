@@ -282,57 +282,22 @@ def load_param_updates(path):
     return updates
 
 
-def _nested_dict():
-    return {}
+def vapix_param_update(ip, username, password, scheme, updates,
+                       timeout=(5.0, 15.0), retries=2, usergroup=None):
+    """
+    POST /axis-cgi/param.cgi?action=update with provided parameters.
+    """
+    url = f"{scheme}://{ip}/axis-cgi/param.cgi"
 
-
-def _insert_param(target, dotted_key, value):
-    parts = dotted_key.split(".")
-    if len(parts) < 2 or parts[0] != "root":
-        raise ValueError(f"Invalid parameter path '{dotted_key}'. Expected to start with 'root.'")
-
-    node = target.setdefault("root", _nested_dict())
-    for part in parts[1:-1]:
-        node = node.setdefault(part, _nested_dict())
-    node[parts[-1]] = value
-
-
-def _dict_to_vaconfig_group(name, payload):
-    group_el = ET.Element("group", name=name)
-    for key, val in payload.items():
-        if isinstance(val, dict):
-            group_el.append(_dict_to_vaconfig_group(key, val))
-        else:
-            param_el = ET.SubElement(group_el, "parameter", name=key)
-            value_el = ET.SubElement(param_el, "value")
-            value_el.text = str(val)
-    return group_el
-
-
-def build_vaconfig_xml(updates):
-    tree = {}
-    for key, value in updates.items():
-        _insert_param(tree, key, value)
-
-    if "root" not in tree:
-        raise ValueError("No root parameters found")
-
-    config_el = ET.Element("config", version="1.0")
-    config_el.append(_dict_to_vaconfig_group("root", tree["root"]))
-    return ET.tostring(config_el, encoding="unicode")
-
-
-def vapix_vaconfig_modify(ip, username, password, scheme, app_name, updates,
-                          timeout=(5.0, 20.0), retries=2):
-    url = f"{scheme}://{ip}/axis-cgi/vaconfig.cgi"
-    xml_body = build_vaconfig_xml(updates)
-    payload = f"action=modify&name={app_name}\n{xml_body}"
+    payload = {"action": "update"}
+    if usergroup:
+        payload["usergroup"] = usergroup
+    payload.update(updates)
 
     try:
         r = _post_with_retries(
             url,
             data=payload,
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
             timeout=timeout,
             username=username,
             password=password,
@@ -344,23 +309,15 @@ def vapix_vaconfig_modify(ip, username, password, scheme, app_name, updates,
     if r.status_code != 200:
         return False, f"HTTP {r.status_code}: {r.text.strip()[:200]}"
 
-    try:
-        root = ET.fromstring(r.text)
-    except ET.ParseError:
-        return False, (r.text or "invalid response")[:200]
-
-    if root.attrib.get("result", "").lower() == "ok":
+    text = r.text.strip()
+    code = parse_axis_error(text)
+    if code is None:
         return True, "OK"
 
-    err = root.find(".//error")
-    if err is not None:
-        err_type = err.attrib.get("type", "")
-        err_msg = err.attrib.get("message", "")
-        details = f"{err_type}: {err_msg}".strip(": ")
-    else:
-        details = r.text.strip()[:200] or "unexpected response"
+    if code == -1:
+        return False, text[:200] or "unexpected response"
 
-    return False, details
+    return False, f"Error: {code}"
 
 
 # -------------------- Update flow --------------------
@@ -403,8 +360,8 @@ def update_one_camera(ip, username, password, package, eap_path,
     time.sleep(2)
 
     if param_updates:
-        ok, msg = vapix_vaconfig_modify(
-            ip, username, password, scheme, package, param_updates
+        ok, msg = vapix_param_update(
+            ip, username, password, scheme, param_updates
         )
         if not ok:
             return ip, False, f"config update failed: {msg}"
