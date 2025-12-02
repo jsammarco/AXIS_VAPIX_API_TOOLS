@@ -42,6 +42,9 @@ Built to be practical on modern **AXIS OS 12.x**, where multicast discovery and 
 - `acap_update_config.py`
   Stops a running app, applies parameter changes from a config file, and restarts the app without uploading a new `.eap`.
 
+- `overlay.py`
+  Dynamic Overlay helper that can run fully from the CLI or through an interactive menu to call `dynamicoverlay.cgi` methods.
+
 - `discover_axis_vapix screenshot.jpg`  
   Example output screenshot.
 
@@ -181,6 +184,63 @@ Parameters:
 
 - `--force-http` / `--force-https`
   Force a specific scheme when probing cameras.
+
+### Dynamic overlays with `overlay.py`
+
+Call the **Dynamic Overlay API** either directly from the CLI or with a guided menu if you omit the method/IP flags.
+
+- **Auto-detects HTTP/HTTPS** (prefers HTTPS if port 443 is open).
+- Uses **Basic or Digest auth** automatically (`curl --anyauth` equivalent).
+- Method-aware prompts in the interactive menu:
+  - `addText` / `setText`: guided prompts for camera number, position, colors, and text (newlines normalized to `%0A`).
+  - `remove`: prompts for overlay identity + camera.
+  - All other methods accept key=value pairs plus optional extra params.
+- Shows the JSON payload **and the equivalent curl command** before sending the request.
+
+Run fully from the CLI:
+
+```bash
+python overlay.py --ip 192.168.1.185 --user root --passw "SuperSecurePass" \
+  --method addText --param camera=1 --param position=topLeft \
+  --param text="Hello from GPT" --param fontSize=18 --param textColor=white
+```
+
+Example output (payload + curl helper + JSON response):
+
+```
+--- Request ---
+{
+  "method": "addText",
+  "apiVersion": "1.0",
+  "params": {
+    "camera": 1,
+    "position": "topLeft",
+    "text": "Hello from GPT",
+    "fontSize": 18,
+    "textColor": "white"
+  }
+}
+
+Equivalent curl command:
+curl --anyauth -u "root:SuperSecurePass" -H "Content-Type: application/json" --data "{\"method\":\"addText\",\"apiVersion\":\"1.0\",\"params\":{\"camera\":1,\"position\":\"topLeft\",\"text\":\"Hello from GPT\",\"fontSize\":18,\"textColor\":\"white\"}}" https://192.168.1.185/axis-cgi/dynamicoverlay/dynamicoverlay.cgi -k
+
+--- Response ---
+{
+  "data": {
+    "identity": 2
+  },
+  "apiVersion": "1.0",
+  "context": null
+}
+```
+
+Use the interactive menu when exploring capabilities or when you want prompts for parameters:
+
+```bash
+python overlay.py
+```
+
+You will be asked for the camera IP, credentials, and a method selection (1–8 for `addImage`, `addText`, `getSupportedVersions`, `list`, `remove`, `setImage`, `setText`, `getOverlayCapabilities`). Each choice then prompts for the relevant params before issuing the request and printing the JSON response.
 
 ---
 
