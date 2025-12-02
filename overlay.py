@@ -174,6 +174,31 @@ def prompt_additional_params(existing: Dict[str, object]) -> Dict[str, object]:
     return params
 
 
+def normalize_overlay_text(text_value: object) -> object:
+    if not isinstance(text_value, str):
+        return text_value
+
+    normalized = text_value.replace("\\n", "%0A")
+    normalized = normalized.replace("\r\n", "%0A").replace("\n", "%0A")
+    return normalized
+
+
+def apply_text_normalization(method: str, params: Dict[str, object]) -> Dict[str, object]:
+    if method not in {"addText", "setText"}:
+        return params
+
+    if "text" not in params:
+        return params
+
+    normalized_text = normalize_overlay_text(params["text"])
+    if normalized_text == params["text"]:
+        return params
+
+    updated = dict(params)
+    updated["text"] = normalized_text
+    return updated
+
+
 def prompt_text_params(identity_required: bool = False) -> Dict[str, object]:
     print("\nProvide text overlay details:")
     params: Dict[str, object] = {}
@@ -185,7 +210,8 @@ def prompt_text_params(identity_required: bool = False) -> Dict[str, object]:
     if camera is not None:
         params["camera"] = camera
 
-    text_value = prompt_value("Overlay text (supports escape sequences like \\n)", required=True)
+    print("New lines: type %0A or \\n (\\n will be converted to %0A for you)")
+    text_value = prompt_value("Overlay text", required=True)
     params["text"] = text_value
 
     print("Select position (examples: topLeft, bottomRight, custom)")
@@ -278,12 +304,28 @@ def interactive_menu(args: argparse.Namespace) -> None:
     perform_call(args)
 
 
+def build_curl_command(url: str, payload: Dict[str, object], username: Optional[str], password: Optional[str]) -> str:
+    auth_part = ""
+    if username is not None:
+        auth_part = f'-u "{username}:{password or ""}" '
+
+    data_str = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+    return f"curl --anyauth {auth_part}-H \"Content-Type: application/json\" --data '{data_str}' {url}"
+
+
 def perform_call(args: argparse.Namespace) -> None:
     params = args.params or {}
+    params = apply_text_normalization(args.method, params)
+
+    scheme = args.scheme or detect_scheme(args.ip) or "http"
+    url = f"{scheme}://{args.ip}/axis-cgi/dynamicoverlay/dynamicoverlay.cgi"
     payload = create_payload(args.method, version=args.version, params=params, context=args.context)
 
     print("\n--- Request ---")
     print(json.dumps(payload, indent=2, ensure_ascii=False))
+
+    print("\nEquivalent curl command:")
+    print(build_curl_command(url, payload, args.user, args.passw))
 
     response = send_overlay_request(
         args.ip,
@@ -293,7 +335,7 @@ def perform_call(args: argparse.Namespace) -> None:
         version=args.version,
         params=params,
         context=args.context,
-        scheme=args.scheme,
+        scheme=scheme,
         payload=payload,
     )
     print_response(response)
