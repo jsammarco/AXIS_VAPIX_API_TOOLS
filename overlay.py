@@ -106,19 +106,14 @@ def coerce_value(raw: str) -> object:
 
 def send_overlay_request(ip: str, method: str, *, username: Optional[str], password: Optional[str],
                          version: str = "1.0", params: Optional[Dict[str, object]] = None,
-                         context: Optional[str] = None, scheme: Optional[str] = None) -> Dict[str, object]:
+                         context: Optional[str] = None, scheme: Optional[str] = None,
+                         payload: Optional[Dict[str, object]] = None) -> Dict[str, object]:
     if scheme is None:
         scheme = detect_scheme(ip) or "http"
 
     url = f"{scheme}://{ip}/axis-cgi/dynamicoverlay/dynamicoverlay.cgi"
-    payload = {
-        "method": method,
-        "apiVersion": version,
-        "params": params or {},
-    }
-
-    if context:
-        payload["context"] = context
+    if payload is None:
+        payload = create_payload(method, version=version, params=params, context=context)
 
     try:
         resp = post_with_anyauth(url, username=username, password=password, json_body=payload, timeout=15.0)
@@ -134,6 +129,20 @@ def send_overlay_request(ip: str, method: str, *, username: Optional[str], passw
 def print_response(response: Dict[str, object]) -> None:
     print("\n--- Response ---")
     print(json.dumps(response, indent=2, ensure_ascii=False))
+
+
+def create_payload(method: str, *, version: str = "1.0", params: Optional[Dict[str, object]] = None,
+                   context: Optional[str] = None) -> Dict[str, object]:
+    payload = {
+        "method": method,
+        "apiVersion": version,
+        "params": params or {},
+    }
+
+    if context:
+        payload["context"] = context
+
+    return payload
 
 
 def prompt_value(prompt: str, *, required: bool = False, default: Optional[str] = None) -> Optional[object]:
@@ -207,6 +216,19 @@ def prompt_text_params(identity_required: bool = False) -> Dict[str, object]:
     return params
 
 
+def prompt_remove_params() -> Dict[str, object]:
+    print("\nProvide overlay details to remove:")
+    params: Dict[str, object] = {}
+    identity = prompt_value("Overlay identity", required=True)
+    params["identity"] = identity
+
+    camera = prompt_value("Camera number", default="1")
+    if camera is not None:
+        params["camera"] = camera
+
+    return params
+
+
 def interactive_menu(args: argparse.Namespace) -> None:
     print("Dynamic Overlay API interactive mode")
     if not args.ip:
@@ -238,6 +260,8 @@ def interactive_menu(args: argparse.Namespace) -> None:
         params = prompt_text_params()
     elif args.method == "setText":
         params = prompt_text_params(identity_required=True)
+    elif args.method == "remove":
+        params = prompt_remove_params()
     else:
         print("\nEnter params as key=value (blank line to finish):")
         while True:
@@ -256,6 +280,11 @@ def interactive_menu(args: argparse.Namespace) -> None:
 
 def perform_call(args: argparse.Namespace) -> None:
     params = args.params or {}
+    payload = create_payload(args.method, version=args.version, params=params, context=args.context)
+
+    print("\n--- Request ---")
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
+
     response = send_overlay_request(
         args.ip,
         args.method,
@@ -265,6 +294,7 @@ def perform_call(args: argparse.Namespace) -> None:
         params=params,
         context=args.context,
         scheme=args.scheme,
+        payload=payload,
     )
     print_response(response)
 
