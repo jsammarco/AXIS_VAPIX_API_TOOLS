@@ -140,6 +140,77 @@ def print_response(response: Dict[str, object]) -> None:
     print(json.dumps(response, indent=2, ensure_ascii=False))
 
 
+def prompt_value(prompt: str, *, required: bool = False, default: Optional[str] = None) -> Optional[object]:
+    suffix = f" (default {default})" if default is not None else ""
+    while True:
+        raw = input(f"{prompt}{suffix}: ").strip()
+        if raw:
+            return coerce_value(raw)
+        if default is not None:
+            return coerce_value(default)
+        if not required:
+            return None
+        print("This field is required.")
+
+
+def prompt_additional_params(existing: Dict[str, object]) -> Dict[str, object]:
+    print("\nEnter any additional params as key=value (blank line to finish):")
+    params = dict(existing)
+    while True:
+        line = input("> ").strip()
+        if not line:
+            break
+        try:
+            key, value = line.split("=", 1)
+        except ValueError:
+            print("Invalid entry, use key=value")
+            continue
+        params[key] = coerce_value(value)
+    return params
+
+
+def prompt_text_params(identity_required: bool = False) -> Dict[str, object]:
+    print("\nProvide text overlay details:")
+    params: Dict[str, object] = {}
+    if identity_required:
+        identity = prompt_value("Existing overlay identity (integer)", required=True)
+        params["identity"] = identity
+
+    camera = prompt_value("Camera number", default="1")
+    if camera is not None:
+        params["camera"] = camera
+
+    text_value = prompt_value("Overlay text (supports escape sequences like \\n)", required=True)
+    params["text"] = text_value
+
+    print("Select position (examples: topLeft, bottomRight, custom)")
+    position = prompt_value("Position", default="topLeft")
+    if position:
+        params["position"] = position
+
+    font_size = prompt_value("Font size (leave blank to let camera choose)")
+    if font_size is not None:
+        params["fontSize"] = font_size
+
+    text_color = prompt_value("Text color", default="white")
+    if text_color:
+        params["textColor"] = text_color
+
+    bg_color = prompt_value("Background color (leave blank for transparent)")
+    if bg_color:
+        params["backgroundColor"] = bg_color
+
+    if position and str(position).lower() == "custom":
+        pos_x = prompt_value("Custom position X")
+        pos_y = prompt_value("Custom position Y")
+        if pos_x is not None:
+            params["position_x"] = pos_x
+        if pos_y is not None:
+            params["position_y"] = pos_y
+
+    return params
+
+
 def interactive_menu(args: argparse.Namespace) -> None:
     print("Dynamic Overlay API interactive mode")
     if not args.ip:
@@ -164,19 +235,26 @@ def interactive_menu(args: argparse.Namespace) -> None:
         args.method = choice
 
     args.version = args.version or input("API version (default 1.0): ").strip() or "1.0"
+    args.context = args.context or input("Context value to echo in responses (optional): ").strip() or None
 
     params: Dict[str, object] = {}
-    print("\nEnter params as key=value (blank line to finish):")
-    while True:
-        line = input("> ").strip()
-        if not line:
-            break
-        try:
-            key, value = line.split("=", 1)
-            params[key] = coerce_value(value)
-        except ValueError:
-            print("Invalid entry, use key=value")
-    args.params = params
+    if args.method == "addText":
+        params = prompt_text_params()
+    elif args.method == "setText":
+        params = prompt_text_params(identity_required=True)
+    else:
+        print("\nEnter params as key=value (blank line to finish):")
+        while True:
+            line = input("> ").strip()
+            if not line:
+                break
+            try:
+                key, value = line.split("=", 1)
+                params[key] = coerce_value(value)
+            except ValueError:
+                print("Invalid entry, use key=value")
+
+    args.params = prompt_additional_params(params)
     perform_call(args)
 
 
