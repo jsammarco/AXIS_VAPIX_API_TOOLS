@@ -309,8 +309,13 @@ def build_curl_command(url: str, payload: Dict[str, object], username: Optional[
     if username is not None:
         auth_part = f'-u "{username}:{password or ""}" '
 
-    data_str = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
-    return f"curl --anyauth {auth_part}-H \"Content-Type: application/json\" --data '{data_str}' {url}"
+    raw_data = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+    escaped_data = raw_data.replace("\"", r"\\\"")
+    return (
+        "curl --anyauth "
+        f"{auth_part}-H \"Content-Type: application/json\" "
+        f"--data \"{escaped_data}\" {url} -k"
+    )
 
 
 def perform_call(args: argparse.Namespace) -> None:
