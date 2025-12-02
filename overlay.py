@@ -110,13 +110,9 @@ def send_overlay_request(ip: str, method: str, *, username: Optional[str], passw
     if scheme is None:
         scheme = detect_scheme(ip) or "http"
 
-    url = f"{scheme}://{ip}/axis-cgi/dynamicoverlay.cgi"
+    url = f"{scheme}://{ip}/axis-cgi/dynamicoverlay/dynamicoverlay.cgi"
     payload = {
-        # Some firmware versions expect "action" instead of "method" for
-        # dynamicoverlay requests. To keep compatibility we send both with the
-        # same value so either variant is accepted.
         "method": method,
-        "action": method,
         "apiVersion": version,
         "params": params or {},
     }
