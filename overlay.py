@@ -304,6 +304,57 @@ def prompt_text_params(identity_required: bool = False) -> Dict[str, object]:
     return params
 
 
+def prompt_add_image_params() -> Dict[str, object]:
+    print("\nProvide image overlay details:")
+    params: Dict[str, object] = {}
+
+    camera = prompt_value("Camera number", default="1")
+    if camera is not None:
+        params["camera"] = camera
+
+    overlay_path = prompt_value("Overlay image path", required=True)
+    params["overlayPath"] = overlay_path
+
+    position = prompt_value(
+        "Position (topLeft, bottomRight, or 'custom' for coordinates)",
+        default="topLeft",
+    )
+    if position:
+        if isinstance(position, str) and position.lower() == "custom":
+            pos_x = prompt_value("Custom position X (-1.0 to 1.0)", required=True)
+            pos_y = prompt_value("Custom position Y (-1.0 to 1.0)", required=True)
+            params["position"] = [pos_x, pos_y]
+        else:
+            params["position"] = position
+
+    return params
+
+
+def prompt_set_image_params() -> Dict[str, object]:
+    print("\nUpdate image overlay parameters:")
+    params: Dict[str, object] = {}
+
+    identity = prompt_value("Existing overlay identity (integer)", required=True)
+    params["identity"] = identity
+
+    overlay_path = prompt_value("Overlay image path (leave blank to keep current)")
+    if overlay_path:
+        params["overlayPath"] = overlay_path
+
+    position = prompt_value(
+        "Position (topLeft, bottomRight, custom, or leave blank to keep)",
+    )
+    if position:
+        if isinstance(position, str) and position.lower() == "custom":
+            pos_x = prompt_value("Custom position X (-1.0 to 1.0)", required=True)
+            pos_y = prompt_value("Custom position Y (-1.0 to 1.0)", required=True)
+            params["position"] = [pos_x, pos_y]
+        else:
+            params["position"] = position
+
+    return params
+
+
 def prompt_remove_params() -> Dict[str, object]:
     print("\nProvide overlay details to remove:")
     params: Dict[str, object] = {}
@@ -337,18 +388,20 @@ def interactive_menu(args: argparse.Namespace) -> None:
         args.method = choice
 
     args.version = args.version or input("API version (default 1.0): ").strip() or "1.0"
-    if args.method != "remove":
-        args.context = args.context or input("Context value to echo in responses (optional): ").strip() or None
+    if args.context is None:
+        args.context = input("Context value to echo in responses (optional): ").strip() or None
 
     params: Dict[str, object] = {}
-    if args.method == "addText":
+    if args.method == "addImage":
+        params = prompt_add_image_params()
+    elif args.method == "addText":
         params = prompt_text_params()
     elif args.method == "setText":
         params = prompt_text_params(identity_required=True)
     elif args.method == "remove":
-        if args.context is None:
-            args.context = input("Context value to echo in responses (optional): ").strip() or None
         params = prompt_remove_params()
+    elif args.method == "setImage":
+        params = prompt_set_image_params()
     elif args.method == "deleteImage":
         path = prompt_value("Path to image to delete", required=True)
         if path is not None:

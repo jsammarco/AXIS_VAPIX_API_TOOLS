@@ -240,7 +240,7 @@ Use the interactive menu when exploring capabilities or when you want prompts fo
 python overlay.py
 ```
 
-You will be asked for the camera IP, credentials, and a method selection (1–8 for `addImage`, `addText`, `getSupportedVersions`, `list`, `remove`, `setImage`, `setText`, `getOverlayCapabilities`). Each choice then prompts for the relevant params before issuing the request and printing the JSON response.
+You will be asked for the camera IP, credentials, and a method selection (1–8 for `addImage`, `addText`, `getSupportedVersions`, `list`, `remove`, `setImage`, `setText`, `getOverlayCapabilities`). Each choice then prompts for the relevant params before issuing the request and printing the JSON response. For image overlays, `addImage` now requests the camera number, overlay image path, and desired position, while `setImage` prompts for the overlay identity and any updates to `overlayPath` or `position`.
 
 ### `setImage`
 
