@@ -4,8 +4,9 @@ AXIS Dynamic Overlay API helper.
 
 Provides CLI and interactive menu for calling /axis-cgi/dynamicoverlay.cgi
 methods (addImage, addText, list, remove, setImage, setText,
-getSupportedVersions, getOverlayCapabilities) and /axis-cgi/
-uploadoverlayimage.cgi methods (uploadOverlayImage, listImages, deleteImage).
+getSupportedVersions, getOverlayCapabilities), /axis-cgi/dynamicoverlay.cgi
+actions (gettext, settext), and /axis-cgi/uploadoverlayimage.cgi methods
+(uploadOverlayImage, listImages, deleteImage).
 
 Text overlays accept Axis overlay modifiers and dynamic text tokens such as
 `#D1`, so you can combine device-provided variables with slot-based text that
@@ -28,6 +29,7 @@ import socket
 from getpass import getpass
 from pathlib import Path
 from typing import Dict, List, Optional
+from urllib.parse import urlencode
 
 import requests
 from requests.auth import HTTPDigestAuth
@@ -39,11 +41,13 @@ requests.packages.urllib3.disable_warnings()
 SUPPORTED_METHODS = [
     "addImage",
     "addText",
+    "gettext",
     "getSupportedVersions",
     "list",
     "listImages",
     "remove",
     "setImage",
+    "settext",
     "setText",
     "getOverlayCapabilities",
     "uploadOverlayImage",
@@ -52,6 +56,7 @@ SUPPORTED_METHODS = [
 
 IMAGE_METHODS = {"uploadOverlayImage", "listImages", "deleteImage"}
 UPLOAD_IMAGE_METHODS = {"uploadOverlayImage"}
+DYNAMIC_TEXT_METHODS = {"settext", "gettext"}
 
 
 def tcp_port_open(ip: str, port: int, timeout: float = 0.4) -> bool:
@@ -89,6 +94,22 @@ def post_with_anyauth(url: str, *, username: Optional[str], password: Optional[s
     digest_session.verify = False
     digest_session.auth = HTTPDigestAuth(username, password) if username and password else None
     return digest_session.post(url, json=json_body, timeout=timeout)
+
+
+def get_with_anyauth(url: str, *, username: Optional[str], password: Optional[str],
+                     timeout: float = 10.0, params: Optional[Dict[str, object]] = None) -> requests.Response:
+    session = requests.Session()
+    session.verify = False
+    session.auth = (username, password) if username and password else None
+
+    response = session.get(url, params=params, timeout=timeout)
+    if response.status_code != 401:
+        return response
+
+    digest_session = requests.Session()
+    digest_session.verify = False
+    digest_session.auth = HTTPDigestAuth(username, password) if username and password else None
+    return digest_session.get(url, params=params, timeout=timeout)
 
 
 def parse_param_pairs(pairs: List[str]) -> Dict[str, object]:
@@ -195,6 +216,26 @@ def send_overlay_image_request(ip: str, method: str, *, username: Optional[str],
         return {"status_code": resp.status_code, "text": resp.text}
 
 
+def send_dynamic_text_request(ip: str, method: str, *, username: Optional[str], password: Optional[str],
+                              params: Optional[Dict[str, object]] = None, scheme: Optional[str] = None) -> Dict[str, object]:
+    if scheme is None:
+        scheme = detect_scheme(ip) or "http"
+
+    url = f"{scheme}://{ip}/axis-cgi/dynamicoverlay.cgi"
+    params = dict(params or {})
+    params.setdefault("action", method)
+
+    try:
+        resp = get_with_anyauth(url, username=username, password=password, params=params, timeout=15.0)
+    except RequestException as exc:
+        return {"error": str(exc)}
+
+    try:
+        return resp.json()
+    except ValueError:
+        return {"status_code": resp.status_code, "text": resp.text}
+
+
 def print_response(response: Dict[str, object]) -> None:
     print("\n--- Response ---")
     print(json.dumps(response, indent=2, ensure_ascii=False))
@@ -240,7 +281,7 @@ def normalize_overlay_text(text_value: object) -> object:
 
 
 def apply_text_normalization(method: str, params: Dict[str, object]) -> Dict[str, object]:
-    if method not in {"addText", "setText"}:
+    if method not in {"addText", "setText", "settext"}:
         return params
 
     if "text" not in params:
@@ -294,6 +335,30 @@ def prompt_text_params(identity_required: bool = False) -> Dict[str, object]:
             params["position_x"] = pos_x
         if pos_y is not None:
             params["position_y"] = pos_y
+
+    return params
+
+
+def prompt_dynamic_settext_params() -> Dict[str, object]:
+    print("\nUpdate dynamic text slot:")
+    params: Dict[str, object] = {}
+
+    text_index = prompt_value("Text slot index", required=True)
+    params["text_index"] = text_index
+
+    print("New lines: type %0A or \\n (\\n will be converted to %0A for you)")
+    text_value = prompt_value("Dynamic text value", required=True)
+    params["text"] = text_value
+
+    return params
+
+
+def prompt_dynamic_gettext_params() -> Dict[str, object]:
+    print("\nRetrieve dynamic text slot:")
+    params: Dict[str, object] = {}
+
+    text_index = prompt_value("Text slot index", required=True)
+    params["text_index"] = text_index
 
     return params
 
@@ -392,6 +457,10 @@ def interactive_menu(args: argparse.Namespace) -> None:
         params = prompt_text_params()
     elif args.method == "setText":
         params = prompt_text_params(identity_required=True)
+    elif args.method == "settext":
+        params = prompt_dynamic_settext_params()
+    elif args.method == "gettext":
+        params = prompt_dynamic_gettext_params()
     elif args.method == "remove":
         params = prompt_remove_params()
     elif args.method == "setImage":
@@ -447,12 +516,24 @@ def build_curl_command(url: str, payload: Dict[str, object], username: Optional[
     )
 
 
+def build_dynamic_curl_command(url: str, params: Dict[str, object], username: Optional[str], password: Optional[str]) -> str:
+    auth_part = ""
+    if username is not None:
+        auth_part = f'-u "{username}:{password or ""}" '
+
+    encoded_params = urlencode(params, doseq=True)
+    return f"curl --anyauth {auth_part}{url}?{encoded_params} -k"
+
+
 def perform_call(args: argparse.Namespace) -> None:
     params = args.params or {}
     params = apply_text_normalization(args.method, params)
 
     if args.method in IMAGE_METHODS:
         perform_image_call(args, params)
+        return
+    if args.method in DYNAMIC_TEXT_METHODS:
+        perform_dynamic_text_call(args, params)
         return
 
     scheme = args.scheme or detect_scheme(args.ip) or "http"
@@ -519,6 +600,29 @@ def perform_image_call(args: argparse.Namespace, params: Dict[str, object]) -> N
         scheme=scheme,
         payload=payload,
         image_path=args.image_file,
+    )
+    print_response(response)
+
+
+def perform_dynamic_text_call(args: argparse.Namespace, params: Dict[str, object]) -> None:
+    scheme = args.scheme or detect_scheme(args.ip) or "http"
+    url = f"{scheme}://{args.ip}/axis-cgi/dynamicoverlay.cgi"
+    params = dict(params)
+    params.setdefault("action", args.method)
+
+    print("\n--- Request ---")
+    print(json.dumps({"action": params.get("action"), **{k: v for k, v in params.items() if k != "action"}}, indent=2, ensure_ascii=False))
+
+    print("\nEquivalent curl command:")
+    print(build_dynamic_curl_command(url, params, args.user, args.passw))
+
+    response = send_dynamic_text_request(
+        args.ip,
+        args.method,
+        username=args.user,
+        password=args.passw,
+        params=params,
+        scheme=scheme,
     )
     print_response(response)
 
