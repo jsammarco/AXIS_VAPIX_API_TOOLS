@@ -4,7 +4,8 @@ AXIS Dynamic Overlay API helper.
 
 Provides CLI and interactive menu for calling /axis-cgi/dynamicoverlay.cgi
 methods (addImage, addText, list, remove, setImage, setText,
-getSupportedVersions, getOverlayCapabilities).
+getSupportedVersions, getOverlayCapabilities) and /axis-cgi/
+uploadoverlayimage.cgi methods (uploadOverlayImage, listImages, deleteImage).
 
 Examples:
   python overlay.py --ip 192.168.0.10 --user root --passw pass \
@@ -15,8 +16,10 @@ If no method/params are supplied, an interactive console menu is shown.
 
 import argparse
 import json
+import mimetypes
 import socket
 from getpass import getpass
+from pathlib import Path
 from typing import Dict, List, Optional
 
 import requests
@@ -31,11 +34,17 @@ SUPPORTED_METHODS = [
     "addText",
     "getSupportedVersions",
     "list",
+    "listImages",
     "remove",
     "setImage",
     "setText",
     "getOverlayCapabilities",
+    "uploadOverlayImage",
+    "deleteImage",
 ]
+
+IMAGE_METHODS = {"uploadOverlayImage", "listImages", "deleteImage"}
+UPLOAD_IMAGE_METHODS = {"uploadOverlayImage"}
 
 
 def tcp_port_open(ip: str, port: int, timeout: float = 0.4) -> bool:
@@ -119,6 +128,59 @@ def send_overlay_request(ip: str, method: str, *, username: Optional[str], passw
         resp = post_with_anyauth(url, username=username, password=password, json_body=payload, timeout=15.0)
     except RequestException as exc:
         return {"error": str(exc)}
+
+    try:
+        return resp.json()
+    except ValueError:
+        return {"status_code": resp.status_code, "text": resp.text}
+
+
+def send_overlay_image_request(ip: str, method: str, *, username: Optional[str], password: Optional[str],
+                              version: str = "1.0", params: Optional[Dict[str, object]] = None,
+                              context: Optional[str] = None, scheme: Optional[str] = None,
+                              payload: Optional[Dict[str, object]] = None,
+                              image_path: Optional[str] = None) -> Dict[str, object]:
+    if scheme is None:
+        scheme = detect_scheme(ip) or "http"
+
+    url = f"{scheme}://{ip}/axis-cgi/uploadoverlayimage.cgi"
+    if payload is None:
+        payload = create_payload(method, version=version, params=params, context=context)
+
+    if method in UPLOAD_IMAGE_METHODS:
+        if not image_path:
+            return {"error": "Image file path is required for uploadOverlayImage"}
+
+        try:
+            image_bytes = Path(image_path).read_bytes()
+        except OSError as exc:
+            return {"error": f"Unable to read image file: {exc}"}
+
+        mime_type, _ = mimetypes.guess_type(image_path)
+        mime_type = mime_type or "application/octet-stream"
+
+        def post_multipart(auth_object):
+            session = requests.Session()
+            session.verify = False
+            session.auth = auth_object
+            files = {
+                "json": ("request.json", json.dumps(payload), "application/json"),
+                "image": (Path(image_path).name, image_bytes, mime_type),
+            }
+            return session.post(url, files=files, timeout=15.0)
+
+        try:
+            resp = post_multipart((username, password) if username and password else None)
+            if resp.status_code == 401:
+                digest_auth = HTTPDigestAuth(username, password) if username and password else None
+                resp = post_multipart(digest_auth)
+        except RequestException as exc:
+            return {"error": str(exc)}
+    else:
+        try:
+            resp = post_with_anyauth(url, username=username, password=password, json_body=payload, timeout=15.0)
+        except RequestException as exc:
+            return {"error": str(exc)}
 
     try:
         return resp.json()
@@ -288,6 +350,23 @@ def interactive_menu(args: argparse.Namespace) -> None:
         params = prompt_text_params(identity_required=True)
     elif args.method == "remove":
         params = prompt_remove_params()
+    elif args.method == "deleteImage":
+        path = prompt_value("Path to image to delete", required=True)
+        if path is not None:
+            params["path"] = path
+    elif args.method == "uploadOverlayImage":
+        args.image_file = input("Path to image file: ").strip()
+        scale_choice = prompt_value("Scale to resolution?", default="true")
+        if scale_choice is not None:
+            params["scaleToResolution"] = scale_choice
+        alpha = prompt_value("Overlay alpha (hex, leave blank for default)")
+        if alpha:
+            params["alpha"] = alpha
+        print("\nEnter additional params as key=value for upload (blank line to finish):")
+        params = prompt_additional_params(params)
+        args.params = params
+        perform_call(args)
+        return
     else:
         print("\nEnter params as key=value (blank line to finish):")
         while True:
@@ -322,6 +401,10 @@ def perform_call(args: argparse.Namespace) -> None:
     params = args.params or {}
     params = apply_text_normalization(args.method, params)
 
+    if args.method in IMAGE_METHODS:
+        perform_image_call(args, params)
+        return
+
     scheme = args.scheme or detect_scheme(args.ip) or "http"
     url = f"{scheme}://{args.ip}/axis-cgi/dynamicoverlay/dynamicoverlay.cgi"
     payload = create_payload(args.method, version=args.version, params=params, context=args.context)
@@ -346,6 +429,50 @@ def perform_call(args: argparse.Namespace) -> None:
     print_response(response)
 
 
+def build_upload_curl_command(url: str, payload: Dict[str, object], username: Optional[str], password: Optional[str],
+                              image_path: str) -> str:
+    auth_part = ""
+    if username is not None:
+        auth_part = f'-u "{username}:{password or ""}" '
+
+    raw_data = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+    escaped_data = raw_data.replace("\"", r"\\\"")
+    return (
+        "curl --anyauth "
+        f"{auth_part}-F \"json={escaped_data}\" "
+        f"-F \"image=@{image_path}\" {url} -k"
+    )
+
+
+def perform_image_call(args: argparse.Namespace, params: Dict[str, object]) -> None:
+    scheme = args.scheme or detect_scheme(args.ip) or "http"
+    url = f"{scheme}://{args.ip}/axis-cgi/uploadoverlayimage.cgi"
+    payload = create_payload(args.method, version=args.version, params=params, context=args.context)
+
+    print("\n--- Request ---")
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
+
+    print("\nEquivalent curl command:")
+    if args.method in UPLOAD_IMAGE_METHODS and args.image_file:
+        print(build_upload_curl_command(url, payload, args.user, args.passw, args.image_file))
+    else:
+        print(build_curl_command(url, payload, args.user, args.passw))
+
+    response = send_overlay_image_request(
+        args.ip,
+        args.method,
+        username=args.user,
+        password=args.passw,
+        version=args.version,
+        params=params,
+        context=args.context,
+        scheme=scheme,
+        payload=payload,
+        image_path=args.image_file,
+    )
+    print_response(response)
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Interact with Axis Dynamic Overlay API")
     parser.add_argument("--ip", help="Camera IP or hostname")
@@ -362,6 +489,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=[],
         help="Parameter key=value (repeat for multiple)",
     )
+    parser.add_argument("--image-file", dest="image_file", help="Image file path for uploadOverlayImage")
     return parser
 
 
