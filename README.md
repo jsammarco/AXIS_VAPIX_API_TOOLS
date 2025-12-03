@@ -195,6 +195,7 @@ Call the **Dynamic Overlay API** either directly from the CLI or with a guided m
   - `addText` / `setText`: guided prompts for camera number, position, colors, and text (newlines normalized to `%0A`).
   - `addImage`: requests camera number, image path, and position.
   - `setImage`: asks for overlay identity plus optional overlay path and/or position updates.
+  - `list`: sends the request without asking for parameters (only the optional context).
   - `listImages`: sends the request without asking for parameters.
   - `remove`: prompts only for overlay identity (with optional context echo).
   - Other methods accept a single round of key=value pairs when parameters are needed.

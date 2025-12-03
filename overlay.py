@@ -390,6 +390,8 @@ def interactive_menu(args: argparse.Namespace) -> None:
         path = prompt_value("Path to image to delete", required=True)
         if path is not None:
             params["path"] = path
+    elif args.method == "list":
+        params = {}
     elif args.method == "listImages":
         params = {}
     elif args.method == "uploadOverlayImage":
