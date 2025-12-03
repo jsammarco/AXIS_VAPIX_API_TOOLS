@@ -1,0 +1,3 @@
+root.Firesafe360.ConfFireThresholdPercent=70
+root.Firesafe360.ConfPersonThresholdPercent=65
+root.Firesafe360.ConfSmokeThresholdPercent=70

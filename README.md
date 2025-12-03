@@ -219,7 +219,7 @@ Run fully from the CLI:
 ```bash
 python overlay.py --ip 192.168.1.185 --user root --passw "SuperSecurePass" \
   --method addText --param camera=1 --param position=topLeft \
-  --param text="Hello from GPT" --param fontSize=18 --param textColor=white
+  --param text="Hello There!" --param fontSize=18 --param textColor=white
 ```
 
 Example output (payload + curl helper + JSON response):
@@ -232,14 +232,14 @@ Example output (payload + curl helper + JSON response):
   "params": {
     "camera": 1,
     "position": "topLeft",
-    "text": "Hello from GPT",
+    "text": "Hello There!",
     "fontSize": 18,
     "textColor": "white"
   }
 }
 
 Equivalent curl command:
-curl --anyauth -u "root:SuperSecurePass" -H "Content-Type: application/json" --data "{\"method\":\"addText\",\"apiVersion\":\"1.0\",\"params\":{\"camera\":1,\"position\":\"topLeft\",\"text\":\"Hello from GPT\",\"fontSize\":18,\"textColor\":\"white\"}}" https://192.168.1.185/axis-cgi/dynamicoverlay/dynamicoverlay.cgi -k
+curl --anyauth -u "root:SuperSecurePass" -H "Content-Type: application/json" --data "{\"method\":\"addText\",\"apiVersion\":\"1.0\",\"params\":{\"camera\":1,\"position\":\"topLeft\",\"text\":\"Hello There!\",\"fontSize\":18,\"textColor\":\"white\"}}" https://192.168.1.185/axis-cgi/dynamicoverlay/dynamicoverlay.cgi -k
 
 --- Response ---
 {
