@@ -195,11 +195,14 @@ def print_response(response: Dict[str, object]) -> None:
 
 def create_payload(method: str, *, version: str = "1.0", params: Optional[Dict[str, object]] = None,
                    context: Optional[str] = None) -> Dict[str, object]:
-    payload = {
-        "method": method,
-        "apiVersion": version,
-        "params": params or {},
-    }
+    if method == "getSupportedVersions":
+        payload: Dict[str, object] = {"method": method}
+    else:
+        payload = {
+            "method": method,
+            "apiVersion": version,
+            "params": params or {},
+        }
 
     if context:
         payload["context"] = context
