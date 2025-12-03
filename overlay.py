@@ -394,6 +394,8 @@ def interactive_menu(args: argparse.Namespace) -> None:
         params = {}
     elif args.method == "listImages":
         params = {}
+    elif args.method == "getSupportedVersions":
+        params = {}
     elif args.method == "uploadOverlayImage":
         args.image_file = input("Path to image file: ").strip()
         scale_choice = prompt_value("Scale to resolution?", default="true")
