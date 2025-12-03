@@ -220,22 +220,6 @@ def prompt_value(prompt: str, *, required: bool = False, default: Optional[str] 
         print("This field is required.")
 
 
-def prompt_additional_params(existing: Dict[str, object]) -> Dict[str, object]:
-    print("\nEnter any additional params as key=value (blank line to finish):")
-    params = dict(existing)
-    while True:
-        line = input("> ").strip()
-        if not line:
-            break
-        try:
-            key, value = line.split("=", 1)
-        except ValueError:
-            print("Invalid entry, use key=value")
-            continue
-        params[key] = coerce_value(value)
-    return params
-
-
 def normalize_overlay_text(text_value: object) -> object:
     if not isinstance(text_value, str):
         return text_value
@@ -406,6 +390,8 @@ def interactive_menu(args: argparse.Namespace) -> None:
         path = prompt_value("Path to image to delete", required=True)
         if path is not None:
             params["path"] = path
+    elif args.method == "listImages":
+        params = {}
     elif args.method == "uploadOverlayImage":
         args.image_file = input("Path to image file: ").strip()
         scale_choice = prompt_value("Scale to resolution?", default="true")
@@ -414,13 +400,10 @@ def interactive_menu(args: argparse.Namespace) -> None:
         alpha = prompt_value("Overlay alpha (hex, leave blank for default)")
         if alpha:
             params["alpha"] = alpha
-        print("\nEnter additional params as key=value for upload (blank line to finish):")
-        params = prompt_additional_params(params)
         args.params = params
         perform_call(args)
         return
     else:
-        args.context = args.context or input("Context value to echo in responses (optional): ").strip() or None
         print("\nEnter params as key=value (blank line to finish):")
         while True:
             line = input("> ").strip()
@@ -432,10 +415,7 @@ def interactive_menu(args: argparse.Namespace) -> None:
             except ValueError:
                 print("Invalid entry, use key=value")
 
-    if args.method == "remove":
-        args.params = params
-    else:
-        args.params = prompt_additional_params(params)
+    args.params = params
     perform_call(args)
 
 

@@ -193,8 +193,11 @@ Call the **Dynamic Overlay API** either directly from the CLI or with a guided m
 - Uses **Basic or Digest auth** automatically (`curl --anyauth` equivalent).
 - Method-aware prompts in the interactive menu:
   - `addText` / `setText`: guided prompts for camera number, position, colors, and text (newlines normalized to `%0A`).
+  - `addImage`: requests camera number, image path, and position.
+  - `setImage`: asks for overlay identity plus optional overlay path and/or position updates.
+  - `listImages`: sends the request without asking for parameters.
   - `remove`: prompts only for overlay identity (with optional context echo).
-  - All other methods accept key=value pairs plus optional extra params.
+  - Other methods accept a single round of key=value pairs when parameters are needed.
   - Shows the JSON payload **and the equivalent curl command** before sending the request.
 
 Run fully from the CLI:
@@ -240,7 +243,7 @@ Use the interactive menu when exploring capabilities or when you want prompts fo
 python overlay.py
 ```
 
-You will be asked for the camera IP, credentials, and a method selection (1–8 for `addImage`, `addText`, `getSupportedVersions`, `list`, `remove`, `setImage`, `setText`, `getOverlayCapabilities`). Each choice then prompts for the relevant params before issuing the request and printing the JSON response. For image overlays, `addImage` now requests the camera number, overlay image path, and desired position, while `setImage` prompts for the overlay identity and any updates to `overlayPath` or `position`.
+You will be asked for the camera IP, credentials, and a method selection (covering overlay and upload methods). Each choice then prompts for the relevant params before issuing the request and printing the JSON response. For image overlays, `addImage` requests the camera number, overlay image path, and desired position, while `setImage` prompts for the overlay identity and any updates to `overlayPath` or `position`. `listImages` runs without asking for any parameters.
 
 ### `setImage`
 
