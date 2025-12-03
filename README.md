@@ -63,7 +63,7 @@ Built to be practical on modern **AXIS OS 12.x**, where multicast discovery and 
   Stops a running app, applies parameter changes from a config file, and restarts the app without uploading a new `.eap`.
 
 - `overlay.py`
-  Dynamic Overlay helper that can run fully from the CLI or through an interactive menu to call `dynamicoverlay.cgi` methods.
+  Dynamic Overlay helper that can run fully from the CLI or through an interactive menu to call `dynamicoverlay.cgi` methods, including dynamic text slot actions (`dtext-gettext`, `dtext-settext`).
 
 - `discover_axis_vapix screenshot.jpg`  
   Example output screenshot.
@@ -290,6 +290,15 @@ You will be asked for the camera IP, credentials, and a method selection (coveri
 - Text overlays support Axis overlay text modifiers, so you can embed runtime values such as date/time or device data in the string you pass to `addText`/`setText`. See the [overlay modifiers schema](https://developer.axis.com/vapix/network-video/overlay-api/#schema-for-axis-cgioverlaymodifierscgi-response) for the full list.
 - Dynamic text slots let you change part of the overlay without recreating it. Place `#D<SLOT>` tokens inside the `text` parameter (for example, `"Camera #n – #D1"`).
 - Update or read a slot value through the dynamic text endpoint on the camera, e.g. `https://<camera>/axis-cgi/dynamicoverlay/dynamicoverlay.cgi?action=setDynamicText&slot=1&text=Hello` to set slot **1**, and `...action=getDynamicText&slot=1` to fetch the current string. The overlay updates automatically wherever `#D1` appears. More details are in the [Dynamic Text documentation](https://developer.axis.com/vapix/network-video/overlay-api/#dynamic-text).
+- Use the dedicated CLI methods `dtext-settext` and `dtext-gettext` to invoke those slot updates directly. For example:
+
+  ```bash
+  python overlay.py --ip 192.168.1.185 --user root --passw "SuperSecurePass" \
+    --method dtext-settext --param text_index=2 --param text="Joe"
+  python overlay.py --ip 192.168.1.185 --user root --passw "SuperSecurePass" \
+    --method dtext-gettext --param text_index=2
+  ```
+- The CLI names include a `dtext-` prefix to distinguish them from the main overlay `setText`/`addText` methods.
 - The script normalizes newlines to `%0A` so multi-line text is rendered correctly by the camera.
 
 ### `setImage`

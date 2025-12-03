@@ -5,8 +5,9 @@ AXIS Dynamic Overlay API helper.
 Provides CLI and interactive menu for calling /axis-cgi/dynamicoverlay.cgi
 methods (addImage, addText, list, remove, setImage, setText,
 getSupportedVersions, getOverlayCapabilities), /axis-cgi/dynamicoverlay.cgi
-actions (gettext, settext), and /axis-cgi/uploadoverlayimage.cgi methods
-(uploadOverlayImage, listImages, deleteImage).
+actions for dynamic text (dtext-gettext, dtext-settext), and
+/axis-cgi/uploadoverlayimage.cgi methods (uploadOverlayImage, listImages,
+deleteImage).
 
 Text overlays accept Axis overlay modifiers and dynamic text tokens such as
 `#D1`, so you can combine device-provided variables with slot-based text that
@@ -41,13 +42,13 @@ requests.packages.urllib3.disable_warnings()
 SUPPORTED_METHODS = [
     "addImage",
     "addText",
-    "gettext",
+    "dtext-gettext",
+    "dtext-settext",
     "getSupportedVersions",
     "list",
     "listImages",
     "remove",
     "setImage",
-    "settext",
     "setText",
     "getOverlayCapabilities",
     "uploadOverlayImage",
@@ -56,7 +57,15 @@ SUPPORTED_METHODS = [
 
 IMAGE_METHODS = {"uploadOverlayImage", "listImages", "deleteImage"}
 UPLOAD_IMAGE_METHODS = {"uploadOverlayImage"}
-DYNAMIC_TEXT_METHODS = {"settext", "gettext"}
+DYNAMIC_TEXT_METHODS = {"dtext-settext", "dtext-gettext"}
+
+
+def dynamic_action_from_method(method: str) -> str:
+    if method == "dtext-settext":
+        return "settext"
+    if method == "dtext-gettext":
+        return "gettext"
+    return method
 
 
 def tcp_port_open(ip: str, port: int, timeout: float = 0.4) -> bool:
@@ -216,14 +225,14 @@ def send_overlay_image_request(ip: str, method: str, *, username: Optional[str],
         return {"status_code": resp.status_code, "text": resp.text}
 
 
-def send_dynamic_text_request(ip: str, method: str, *, username: Optional[str], password: Optional[str],
+def send_dynamic_text_request(ip: str, action: str, *, username: Optional[str], password: Optional[str],
                               params: Optional[Dict[str, object]] = None, scheme: Optional[str] = None) -> Dict[str, object]:
     if scheme is None:
         scheme = detect_scheme(ip) or "http"
 
     url = f"{scheme}://{ip}/axis-cgi/dynamicoverlay.cgi"
     params = dict(params or {})
-    params.setdefault("action", method)
+    params.setdefault("action", action)
 
     try:
         resp = get_with_anyauth(url, username=username, password=password, params=params, timeout=15.0)
@@ -281,7 +290,7 @@ def normalize_overlay_text(text_value: object) -> object:
 
 
 def apply_text_normalization(method: str, params: Dict[str, object]) -> Dict[str, object]:
-    if method not in {"addText", "setText", "settext"}:
+    if method not in {"addText", "setText", "dtext-settext"}:
         return params
 
     if "text" not in params:
@@ -457,9 +466,9 @@ def interactive_menu(args: argparse.Namespace) -> None:
         params = prompt_text_params()
     elif args.method == "setText":
         params = prompt_text_params(identity_required=True)
-    elif args.method == "settext":
+    elif args.method == "dtext-settext":
         params = prompt_dynamic_settext_params()
-    elif args.method == "gettext":
+    elif args.method == "dtext-gettext":
         params = prompt_dynamic_gettext_params()
     elif args.method == "remove":
         params = prompt_remove_params()
@@ -608,7 +617,8 @@ def perform_dynamic_text_call(args: argparse.Namespace, params: Dict[str, object
     scheme = args.scheme or detect_scheme(args.ip) or "http"
     url = f"{scheme}://{args.ip}/axis-cgi/dynamicoverlay.cgi"
     params = dict(params)
-    params.setdefault("action", args.method)
+    action = dynamic_action_from_method(args.method)
+    params.setdefault("action", action)
 
     print("\n--- Request ---")
     print(json.dumps({"action": params.get("action"), **{k: v for k, v in params.items() if k != "action"}}, indent=2, ensure_ascii=False))
@@ -618,7 +628,7 @@ def perform_dynamic_text_call(args: argparse.Namespace, params: Dict[str, object
 
     response = send_dynamic_text_request(
         args.ip,
-        args.method,
+        action,
         username=args.user,
         password=args.passw,
         params=params,
