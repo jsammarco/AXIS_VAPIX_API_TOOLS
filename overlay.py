@@ -7,6 +7,13 @@ methods (addImage, addText, list, remove, setImage, setText,
 getSupportedVersions, getOverlayCapabilities) and /axis-cgi/
 uploadoverlayimage.cgi methods (uploadOverlayImage, listImages, deleteImage).
 
+Text overlays accept Axis overlay modifiers and dynamic text tokens such as
+`#D1`, so you can combine device-provided variables with slot-based text that
+is updated separately through the camera's dynamic text endpoint
+(/axis-cgi/dynamicoverlay/dynamicoverlay.cgi?action=setDynamicText&slot=<n>&text=<value>).
+Image overlays can be uploaded directly via `uploadOverlayImage` before being
+referenced in `addImage` or `setImage`.
+
 Examples:
   python overlay.py --ip 192.168.0.10 --user root --passw pass \
       --method addText --param text="Hello" --param position_x=100 --param position_y=100

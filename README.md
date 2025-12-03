@@ -7,6 +7,26 @@ Built to be practical on modern **AXIS OS 12.x**, where multicast discovery and 
 
 ---
 
+## Table of Contents
+
+- [Features](#features)
+- [Repository contents](#repository-contents)
+- [Requirements](#requirements)
+- [Usage](#usage)
+  - [Common flags](#common-flags)
+  - [Update ACAP apps with `acap_update_app.py`](#update-acap-apps-with-acap_update_apppy)
+  - [Update ACAP app configuration only with `acap_update_config.py`](#update-acap-app-configuration-only-with-acap_update_configpy)
+  - [Dynamic overlays with `overlay.py`](#dynamic-overlays-with-overlaypy)
+    - [Image uploads](#image-uploads)
+    - [Text overlays, variables, and dynamic slots](#text-overlays-variables-and-dynamic-slots)
+- [Example output](#example-output)
+- [How it works](#how-it-works)
+- [Notes & limitations](#notes--limitations)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
+
 ## Features
 
 - **Subnet discovery (no SSDP required)**  
@@ -258,6 +278,19 @@ python overlay.py
 ```
 
 You will be asked for the camera IP, credentials, and a method selection (covering overlay and upload methods). Each choice then prompts for the relevant params before issuing the request and printing the JSON response. For image overlays, `addImage` requests the camera number, overlay image path, and desired position, while `setImage` prompts for the overlay identity and any updates to `overlayPath` or `position`. `listImages` runs without asking for any parameters.
+
+#### Image uploads
+
+- Use the **`uploadOverlayImage`** method to push an image file to the camera before referencing it in `addImage`/`setImage`.
+- Supply `--image-file /path/to/file.png` on the CLI (or provide a path when prompted in the menu). Optional params such as `scaleToResolution` and `alpha` are supported when you add `--param` entries.
+- After upload, call `listImages` to enumerate stored files or `deleteImage` to remove one.
+
+#### Text overlays, variables, and dynamic slots
+
+- Text overlays support Axis overlay text modifiers, so you can embed runtime values such as date/time or device data in the string you pass to `addText`/`setText`. See the [overlay modifiers schema](https://developer.axis.com/vapix/network-video/overlay-api/#schema-for-axis-cgioverlaymodifierscgi-response) for the full list.
+- Dynamic text slots let you change part of the overlay without recreating it. Place `#D<SLOT>` tokens inside the `text` parameter (for example, `"Camera #n – #D1"`).
+- Update or read a slot value through the dynamic text endpoint on the camera, e.g. `https://<camera>/axis-cgi/dynamicoverlay/dynamicoverlay.cgi?action=setDynamicText&slot=1&text=Hello` to set slot **1**, and `...action=getDynamicText&slot=1` to fetch the current string. The overlay updates automatically wherever `#D1` appears. More details are in the [Dynamic Text documentation](https://developer.axis.com/vapix/network-video/overlay-api/#dynamic-text).
+- The script normalizes newlines to `%0A` so multi-line text is rendered correctly by the camera.
 
 ### `setImage`
 
