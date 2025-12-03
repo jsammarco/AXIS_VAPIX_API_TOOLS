@@ -245,7 +245,11 @@ def send_dynamic_text_request(ip: str, action: str, *, username: Optional[str], 
         return {"status_code": resp.status_code, "text": resp.text}
 
 
-def print_response(response: Dict[str, object]) -> None:
+def print_response(response: Dict[str, object], *, json_only: bool = False) -> None:
+    if json_only:
+        print(json.dumps(response, ensure_ascii=False))
+        return
+
     print("\n--- Response ---")
     print(json.dumps(response, indent=2, ensure_ascii=False))
 
@@ -456,7 +460,7 @@ def interactive_menu(args: argparse.Namespace) -> None:
         args.method = choice
 
     args.version = args.version or input("API version (default 1.0): ").strip() or "1.0"
-    if args.context is None:
+    if args.method not in DYNAMIC_TEXT_METHODS and args.context is None:
         args.context = input("Context value to echo in responses (optional): ").strip() or None
 
     params: Dict[str, object] = {}
@@ -549,11 +553,12 @@ def perform_call(args: argparse.Namespace) -> None:
     url = f"{scheme}://{args.ip}/axis-cgi/dynamicoverlay/dynamicoverlay.cgi"
     payload = create_payload(args.method, version=args.version, params=params, context=args.context)
 
-    print("\n--- Request ---")
-    print(json.dumps(payload, indent=2, ensure_ascii=False))
+    if not args.json_only:
+        print("\n--- Request ---")
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
 
-    print("\nEquivalent curl command:")
-    print(build_curl_command(url, payload, args.user, args.passw))
+        print("\nEquivalent curl command:")
+        print(build_curl_command(url, payload, args.user, args.passw))
 
     response = send_overlay_request(
         args.ip,
@@ -566,7 +571,7 @@ def perform_call(args: argparse.Namespace) -> None:
         scheme=scheme,
         payload=payload,
     )
-    print_response(response)
+    print_response(response, json_only=args.json_only)
 
 
 def build_upload_curl_command(url: str, payload: Dict[str, object], username: Optional[str], password: Optional[str],
@@ -589,14 +594,15 @@ def perform_image_call(args: argparse.Namespace, params: Dict[str, object]) -> N
     url = f"{scheme}://{args.ip}/axis-cgi/uploadoverlayimage.cgi"
     payload = create_payload(args.method, version=args.version, params=params, context=args.context)
 
-    print("\n--- Request ---")
-    print(json.dumps(payload, indent=2, ensure_ascii=False))
+    if not args.json_only:
+        print("\n--- Request ---")
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
 
-    print("\nEquivalent curl command:")
-    if args.method in UPLOAD_IMAGE_METHODS and args.image_file:
-        print(build_upload_curl_command(url, payload, args.user, args.passw, args.image_file))
-    else:
-        print(build_curl_command(url, payload, args.user, args.passw))
+        print("\nEquivalent curl command:")
+        if args.method in UPLOAD_IMAGE_METHODS and args.image_file:
+            print(build_upload_curl_command(url, payload, args.user, args.passw, args.image_file))
+        else:
+            print(build_curl_command(url, payload, args.user, args.passw))
 
     response = send_overlay_image_request(
         args.ip,
@@ -610,7 +616,7 @@ def perform_image_call(args: argparse.Namespace, params: Dict[str, object]) -> N
         payload=payload,
         image_path=args.image_file,
     )
-    print_response(response)
+    print_response(response, json_only=args.json_only)
 
 
 def perform_dynamic_text_call(args: argparse.Namespace, params: Dict[str, object]) -> None:
@@ -620,11 +626,12 @@ def perform_dynamic_text_call(args: argparse.Namespace, params: Dict[str, object
     action = dynamic_action_from_method(args.method)
     params.setdefault("action", action)
 
-    print("\n--- Request ---")
-    print(json.dumps({"action": params.get("action"), **{k: v for k, v in params.items() if k != "action"}}, indent=2, ensure_ascii=False))
+    if not args.json_only:
+        print("\n--- Request ---")
+        print(json.dumps({"action": params.get("action"), **{k: v for k, v in params.items() if k != "action"}}, indent=2, ensure_ascii=False))
 
-    print("\nEquivalent curl command:")
-    print(build_dynamic_curl_command(url, params, args.user, args.passw))
+        print("\nEquivalent curl command:")
+        print(build_dynamic_curl_command(url, params, args.user, args.passw))
 
     response = send_dynamic_text_request(
         args.ip,
@@ -634,7 +641,7 @@ def perform_dynamic_text_call(args: argparse.Namespace, params: Dict[str, object
         params=params,
         scheme=scheme,
     )
-    print_response(response)
+    print_response(response, json_only=args.json_only)
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -646,6 +653,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--method", choices=SUPPORTED_METHODS, help="Overlay API method to call")
     parser.add_argument("--version", default="1.0", help="API version (default 1.0)")
     parser.add_argument("--context", help="Optional context string to echo back in responses")
+    parser.add_argument("--json-only", action="store_true", help="Only output JSON responses (suppress request and curl previews)")
     parser.add_argument(
         "--param",
         action="append",
@@ -665,6 +673,9 @@ def main():
         args.params = parse_param_pairs(args.param_pairs)
     else:
         args.params = {}
+
+    if args.method in DYNAMIC_TEXT_METHODS:
+        args.context = None
 
     if not args.method or not args.ip:
         interactive_menu(args)

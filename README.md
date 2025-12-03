@@ -211,6 +211,7 @@ Call the **Dynamic Overlay API** either directly from the CLI or with a guided m
 
 - **Auto-detects HTTP/HTTPS** (prefers HTTPS if port 443 is open).
 - Uses **Basic or Digest auth** automatically (`curl --anyauth` equivalent).
+- Optional **`--json-only`** flag prints only the JSON response (no payload preview or curl helper) for scripting.
 - Covers **all Dynamic Overlay and upload overlay image methods**:
   - `getSupportedVersions`: fetch supported API versions (no `apiVersion` or params required).
   - `getOverlayCapabilities`: returns overlay feature capabilities for the device.
@@ -298,6 +299,7 @@ You will be asked for the camera IP, credentials, and a method selection (coveri
   python overlay.py --ip 192.168.1.185 --user root --passw "SuperSecurePass" \
     --method dtext-gettext --param text_index=2
   ```
+- Dynamic text slot actions do **not** accept a `context` value (the camera ignores it for these GET requests).
 - The CLI names include a `dtext-` prefix to distinguish them from the main overlay `setText`/`addText` methods.
 - The script normalizes newlines to `%0A` so multi-line text is rendered correctly by the camera.
 
