@@ -191,6 +191,18 @@ Call the **Dynamic Overlay API** either directly from the CLI or with a guided m
 
 - **Auto-detects HTTP/HTTPS** (prefers HTTPS if port 443 is open).
 - Uses **Basic or Digest auth** automatically (`curl --anyauth` equivalent).
+- Covers **all Dynamic Overlay and upload overlay image methods**:
+  - `getSupportedVersions`: fetch supported API versions (no `apiVersion` or params required).
+  - `getOverlayCapabilities`: returns overlay feature capabilities for the device.
+  - `list`: returns existing overlays.
+  - `addText`: create a text overlay (text normalized to `%0A` for newlines).
+  - `setText`: update an existing text overlay.
+  - `addImage`: create an image overlay.
+  - `setImage`: update an existing image overlay.
+  - `remove`: delete an overlay by identity.
+  - `uploadOverlayImage`: upload an image file before assigning it to an overlay.
+  - `listImages`: list previously uploaded overlay images.
+  - `deleteImage`: remove a previously uploaded overlay image.
 - Method-aware prompts in the interactive menu:
   - `addText` / `setText`: guided prompts for camera number, position, colors, and text (newlines normalized to `%0A`).
   - `addImage`: requests camera number, image path, and position.
