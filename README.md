@@ -218,6 +218,7 @@ Call the **Dynamic Overlay API** either directly from the CLI or with a guided m
   - `list`: returns existing overlays.
   - `addText`: create a text overlay (text normalized to `%0A` for newlines).
   - `setText`: update an existing text overlay.
+  - `dtext-settext` / `dtext-gettext`: call the dynamic text slot API (`settext`/`gettext`) without a `context` value.
   - `addImage`: create an image overlay.
   - `setImage`: update an existing image overlay.
   - `remove`: delete an overlay by identity.
@@ -229,6 +230,7 @@ Call the **Dynamic Overlay API** either directly from the CLI or with a guided m
   - `addImage`: requests camera number, image path, and position.
   - `setImage`: asks for overlay identity plus optional overlay path and/or position updates.
   - `getSupportedVersions`: sends the request with only the method plus optional context (no `apiVersion` or `params`).
+  - `dtext-settext` / `dtext-gettext`: prompt only for the text slot index (and text for updates) and skip `context` since the camera ignores it.
   - `list`: sends the request without asking for parameters (only the optional context).
   - `listImages`: sends the request without asking for parameters.
   - `remove`: prompts only for overlay identity (with optional context echo).
