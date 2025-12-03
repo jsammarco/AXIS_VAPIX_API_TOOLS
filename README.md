@@ -193,9 +193,9 @@ Call the **Dynamic Overlay API** either directly from the CLI or with a guided m
 - Uses **Basic or Digest auth** automatically (`curl --anyauth` equivalent).
 - Method-aware prompts in the interactive menu:
   - `addText` / `setText`: guided prompts for camera number, position, colors, and text (newlines normalized to `%0A`).
-  - `remove`: prompts for overlay identity + camera.
+  - `remove`: prompts only for overlay identity (with optional context echo).
   - All other methods accept key=value pairs plus optional extra params.
-- Shows the JSON payload **and the equivalent curl command** before sending the request.
+  - Shows the JSON payload **and the equivalent curl command** before sending the request.
 
 Run fully from the CLI:
 
@@ -241,6 +241,41 @@ python overlay.py
 ```
 
 You will be asked for the camera IP, credentials, and a method selection (1–8 for `addImage`, `addText`, `getSupportedVersions`, `list`, `remove`, `setImage`, `setText`, `getOverlayCapabilities`). Each choice then prompts for the relevant params before issuing the request and printing the JSON response.
+
+### `setImage`
+
+Use `setImage` to update properties for an existing image overlay. Required and optional parameters mirror the Axis Dynamic Overlay API:
+
+- `identity` (integer, required): which overlay to change.
+- `overlayPath` (string, optional): path to the image file that should be displayed for the overlay.
+- `position` (predefined keyword or `[x,y]` array, optional): accepts one of `top`, `topRight`, `bottomRight`, `bottom`, `bottomLeft`, `topLeft`, or a relative coordinate pair ranging from `-1.0` to `1.0` for both X and Y. If omitted, the position remains unchanged.
+- `context` (string, optional): echoed back in the response when supplied.
+
+Example request body:
+
+```
+{
+  "apiVersion": "1.0",
+  "context": "444",
+  "method": "setImage",
+  "params": {
+    "identity": 3,
+    "overlayPath": "/usr/local/images/logo.png",
+    "position": "topRight"
+  }
+}
+```
+
+Successful responses include the echoed context (if present) and an empty `data` object:
+
+```
+{
+  "apiVersion": "1.0",
+  "method": "setImage",
+  "context": "444",
+  "data": {}
+}
+```
 
 ---
 

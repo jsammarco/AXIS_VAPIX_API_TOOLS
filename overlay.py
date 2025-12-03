@@ -310,10 +310,6 @@ def prompt_remove_params() -> Dict[str, object]:
     identity = prompt_value("Overlay identity", required=True)
     params["identity"] = identity
 
-    camera = prompt_value("Camera number", default="1")
-    if camera is not None:
-        params["camera"] = camera
-
     return params
 
 
@@ -341,7 +337,8 @@ def interactive_menu(args: argparse.Namespace) -> None:
         args.method = choice
 
     args.version = args.version or input("API version (default 1.0): ").strip() or "1.0"
-    args.context = args.context or input("Context value to echo in responses (optional): ").strip() or None
+    if args.method != "remove":
+        args.context = args.context or input("Context value to echo in responses (optional): ").strip() or None
 
     params: Dict[str, object] = {}
     if args.method == "addText":
@@ -349,6 +346,8 @@ def interactive_menu(args: argparse.Namespace) -> None:
     elif args.method == "setText":
         params = prompt_text_params(identity_required=True)
     elif args.method == "remove":
+        if args.context is None:
+            args.context = input("Context value to echo in responses (optional): ").strip() or None
         params = prompt_remove_params()
     elif args.method == "deleteImage":
         path = prompt_value("Path to image to delete", required=True)
@@ -368,6 +367,7 @@ def interactive_menu(args: argparse.Namespace) -> None:
         perform_call(args)
         return
     else:
+        args.context = args.context or input("Context value to echo in responses (optional): ").strip() or None
         print("\nEnter params as key=value (blank line to finish):")
         while True:
             line = input("> ").strip()
@@ -379,7 +379,10 @@ def interactive_menu(args: argparse.Namespace) -> None:
             except ValueError:
                 print("Invalid entry, use key=value")
 
-    args.params = prompt_additional_params(params)
+    if args.method == "remove":
+        args.params = params
+    else:
+        args.params = prompt_additional_params(params)
     perform_call(args)
 
 
