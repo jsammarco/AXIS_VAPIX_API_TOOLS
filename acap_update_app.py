@@ -211,7 +211,7 @@ def vapix_app_control(ip, username, password, scheme,
 def vapix_app_upload(ip, username, password, scheme,
                      eap_path,
                      timeout=(5.0, 90.0), retries=2,
-                     show_progress=False):
+                     show_progress=False, progress_position=None):
     """
     POST /axis-cgi/applications/upload.cgi
     Uploads can take a while; longer read timeout.
@@ -249,6 +249,7 @@ def vapix_app_upload(ip, username, password, scheme,
                     unit_scale=True,
                     unit_divisor=1024,
                     leave=False,
+                    position=progress_position,
                 )
                 file_obj = UploadProgressFile(f, upload_bar)
 
@@ -363,7 +364,7 @@ def update_one_camera(ip, username, password, package, eap_path,
                       stop_first=True, prefer_https=True,
                       force_http=False, force_https=False,
                       param_updates=None, usergroup=None,
-                      show_progress=False):
+                      show_progress=False, progress_position=None):
 
     step_bar = None
     step_total = 3 + (1 if stop_first else 0) + (1 if param_updates else 0)
@@ -373,6 +374,7 @@ def update_one_camera(ip, username, password, package, eap_path,
             desc=f"{ip} steps",
             leave=False,
             unit="step",
+            position=progress_position,
         )
 
     def update_step(label):
@@ -412,7 +414,13 @@ def update_one_camera(ip, username, password, package, eap_path,
 
         # Upload new (hard fail if not OK)
         ok, msg = vapix_app_upload(
-            ip, username, password, scheme, eap_path, show_progress=show_progress
+            ip,
+            username,
+            password,
+            scheme,
+            eap_path,
+            show_progress=show_progress,
+            progress_position=progress_position,
         )
         update_step("upload")
         if not ok:
@@ -488,6 +496,8 @@ def main():
     pbar = tqdm(total=len(targets), desc="Updating cameras", unit="cam") if tqdm else None
     results = []
 
+    position_map = {ip: idx + 1 for idx, ip in enumerate(targets)} if tqdm else {}
+
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
         futs = {
             ex.submit(
@@ -504,6 +514,7 @@ def main():
                 param_updates=param_updates,
                 usergroup=args.usergroup,
                 show_progress=args.show_progress,
+                progress_position=position_map.get(ip),
             ): ip
             for ip in targets
         }
