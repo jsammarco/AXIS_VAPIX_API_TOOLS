@@ -19,6 +19,7 @@ Requires: pip install requests tqdm
 
 import argparse
 import ipaddress
+import os
 import socket
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -209,16 +210,49 @@ def vapix_app_control(ip, username, password, scheme,
 
 def vapix_app_upload(ip, username, password, scheme,
                      eap_path,
-                     timeout=(5.0, 90.0), retries=2):
+                     timeout=(5.0, 90.0), retries=2,
+                     show_progress=False):
     """
     POST /axis-cgi/applications/upload.cgi
     Uploads can take a while; longer read timeout.
     """
     url = f"{scheme}://{ip}/axis-cgi/applications/upload.cgi"
 
+    upload_bar = None
+
+    class UploadProgressFile:
+        def __init__(self, file_obj, bar=None):
+            self._file = file_obj
+            self._bar = bar
+
+        def read(self, size=-1):
+            data = self._file.read(size)
+            if self._bar and data:
+                self._bar.update(len(data))
+            return data
+
+        def __getattr__(self, name):
+            return getattr(self._file, name)
+
     try:
         with open(eap_path, "rb") as f:
-            files = {"file": (eap_path, f, "application/octet-stream")}
+            file_obj = f
+            if tqdm and show_progress:
+                try:
+                    total_size = os.path.getsize(eap_path)
+                except OSError:
+                    total_size = None
+                upload_bar = tqdm(
+                    total=total_size,
+                    desc=f"{ip} upload",
+                    unit="B",
+                    unit_scale=True,
+                    unit_divisor=1024,
+                    leave=False,
+                )
+                file_obj = UploadProgressFile(f, upload_bar)
+
+            files = {"file": (os.path.basename(eap_path), file_obj, "application/octet-stream")}
             r = _post_with_retries(
                 url, files=files, timeout=timeout,
                 username=username, password=password, retries=retries
@@ -227,6 +261,9 @@ def vapix_app_upload(ip, username, password, scheme,
         return False, "timeout waiting for upload response"
     except Exception as e:
         return False, f"upload request failed: {e}"
+    finally:
+        if upload_bar:
+            upload_bar.close()
 
     if r.status_code != 200:
         return False, f"HTTP {r.status_code}: {r.text.strip()[:200]}"
@@ -325,60 +362,89 @@ def vapix_param_update(ip, username, password, scheme, updates,
 def update_one_camera(ip, username, password, package, eap_path,
                       stop_first=True, prefer_https=True,
                       force_http=False, force_https=False,
-                      param_updates=None, usergroup=None):
+                      param_updates=None, usergroup=None,
+                      show_progress=False):
 
-    if force_http:
-        scheme = "http" if tcp_port_open(ip, 80) else None
-    elif force_https:
-        scheme = "https" if tcp_port_open(ip, 443) else None
-    else:
-        scheme = detect_scheme(ip, prefer_https=prefer_https)
-
-    if not scheme:
-        return ip, False, "no http/https on 80/443"
-
-    # Light capability check
-    try:
-        vapix_app_list(ip, username, password, scheme)
-    except Exception as e:
-        return ip, False, f"applications/list.cgi unavailable ({e})"
-
-    # Stop (optional, soft-fail ok)
-    if stop_first:
-        ok, msg = vapix_app_control(ip, username, password, scheme, "stop", package)
-        # don't fail run on stop timeout/error
-        # print(f"{ip}: stop -> {ok}, {msg}")
-
-    # Remove old (soft-fail ok)
-    vapix_app_control(ip, username, password, scheme, "remove", package)
-
-    # Upload new (hard fail if not OK)
-    ok, msg = vapix_app_upload(ip, username, password, scheme, eap_path)
-    if not ok:
-        return ip, False, f"upload failed: {msg}"
-
-    time.sleep(2)
-
-    if param_updates:
-        ok, msg = vapix_param_update(
-            ip, username, password, scheme, param_updates, usergroup=usergroup
+    step_bar = None
+    step_total = 3 + (1 if stop_first else 0) + (1 if param_updates else 0)
+    if tqdm and show_progress:
+        step_bar = tqdm(
+            total=step_total,
+            desc=f"{ip} steps",
+            leave=False,
+            unit="step",
         )
-        if not ok:
-            return ip, False, f"config update failed: {msg}"
 
-    # Start (hard fail if not OK)
-    ok, msg = vapix_app_control(ip, username, password, scheme, "start", package)
-    if not ok and "already running" not in msg.lower():
-        return ip, False, f"start failed: {msg}"
+    def update_step(label):
+        if step_bar:
+            step_bar.set_postfix_str(label, refresh=False)
+            step_bar.update(1)
+        elif show_progress:
+            print(f"{ip}: {label}")
 
-    # Verify status
     try:
-        apps = vapix_app_list(ip, username, password, scheme)
-        status = next((a["status"] for a in apps if a["name"] == package), "unknown")
-    except Exception:
-        status = "unknown"
+        if force_http:
+            scheme = "http" if tcp_port_open(ip, 80) else None
+        elif force_https:
+            scheme = "https" if tcp_port_open(ip, 443) else None
+        else:
+            scheme = detect_scheme(ip, prefer_https=prefer_https)
 
-    return ip, True, f"updated, status={status}"
+        if not scheme:
+            return ip, False, "no http/https on 80/443"
+
+        # Light capability check
+        try:
+            vapix_app_list(ip, username, password, scheme)
+        except Exception as e:
+            return ip, False, f"applications/list.cgi unavailable ({e})"
+
+        # Stop (optional, soft-fail ok)
+        if stop_first:
+            ok, msg = vapix_app_control(ip, username, password, scheme, "stop", package)
+            update_step("stop")
+            # don't fail run on stop timeout/error
+            # print(f"{ip}: stop -> {ok}, {msg}")
+
+        # Remove old (soft-fail ok)
+        vapix_app_control(ip, username, password, scheme, "remove", package)
+        update_step("remove")
+
+        # Upload new (hard fail if not OK)
+        ok, msg = vapix_app_upload(
+            ip, username, password, scheme, eap_path, show_progress=show_progress
+        )
+        update_step("upload")
+        if not ok:
+            return ip, False, f"upload failed: {msg}"
+
+        time.sleep(2)
+
+        if param_updates:
+            ok, msg = vapix_param_update(
+                ip, username, password, scheme, param_updates, usergroup=usergroup
+            )
+            update_step("config")
+            if not ok:
+                return ip, False, f"config update failed: {msg}"
+
+        # Start (hard fail if not OK)
+        ok, msg = vapix_app_control(ip, username, password, scheme, "start", package)
+        update_step("start")
+        if not ok and "already running" not in msg.lower():
+            return ip, False, f"start failed: {msg}"
+
+        # Verify status
+        try:
+            apps = vapix_app_list(ip, username, password, scheme)
+            status = next((a["status"] for a in apps if a["name"] == package), "unknown")
+        except Exception:
+            status = "unknown"
+
+        return ip, True, f"updated, status={status}"
+    finally:
+        if step_bar:
+            step_bar.close()
 
 
 # -------------------- Subnet targets --------------------
@@ -405,6 +471,7 @@ def main():
     ap.add_argument("--force-http", action="store_true", help="Force HTTP only")
     ap.add_argument("--force-https", action="store_true", help="Force HTTPS only")
     ap.add_argument("--usergroup", help="User group to use for param.cgi updates")
+    ap.add_argument("--show-progress", action="store_true", help="Show per-camera step and upload progress")
     args = ap.parse_args()
 
     if args.ip:
@@ -436,6 +503,7 @@ def main():
                 force_https=args.force_https,
                 param_updates=param_updates,
                 usergroup=args.usergroup,
+                show_progress=args.show_progress,
             ): ip
             for ip in targets
         }
